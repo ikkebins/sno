@@ -1,0 +1,12 @@
+apiVersion: v1beta1
+kind: AgentConfig
+metadata:
+  name: sno
+rendezvousIP: 192.168.X.Y
+hosts:
+  - hostname: master-1
+    role: master
+    interfaces:
+      - name: ens3
+        macAddress: AA:FF:EE:AA:FF:EE
+
