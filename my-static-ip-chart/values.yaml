@@ -1,0 +1,11 @@
+namespace: admin-kubernetes
+
+networkAttachmentName: netshoot-static-net
+staticIP: 10.128.2.50/23
+gateway: 10.128.2.1
+
+deploymentName: netshoot-static-deployment
+replicaCount: 1
+image:
+  repository: nicolaka/netshoot
+  tag: latest

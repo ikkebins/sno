@@ -1,0 +1,4 @@
+apiVersion: v2
+name: my-static-ip-chart
+description: Helm Chart for static IP Deployment with Multus and OVN
+version: 0.1.0
