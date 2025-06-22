@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-admin-operator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ns-operator-sa
+  namespace: ns-admin-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ns-admin-operator
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["rolebindings"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ns-admin-operator
+roleRef:
+  kind: ClusterRole
+  name: ns-admin-operator
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: ns-operator-sa
+    namespace: ns-admin-operator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ns-operator-script
+  namespace: ns-admin-operator
+data:
+  run.sh: |
+    #!/bin/bash
+    echo "[*] Installing tools..."
+    dnf install -y openshift-clients jq >/dev/null 2>&1
+    echo "[*] Starting watcher loop..."
+    seen=""
+    while true; do
+      oc get ns -o json | jq -r '.items[].metadata.name' | while read ns; do
+        if echo "$seen" | grep -q "^$ns$"; then
+          continue
+        fi
+        seen="$seen\n$ns"
+        echo "[+] New namespace detected: $ns"
+        oc create rolebinding user-admin-binding \
+          --clusterrole=admin \
+          --user=user \
+          -n "$ns" || true
+      done
+      sleep 10
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ns-admin-operator
+  namespace: ns-admin-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ns-admin-operator
+  template:
+    metadata:
+      labels:
+        app: ns-admin-operator
+    spec:
+      serviceAccountName: ns-operator-sa
+      containers:
+        - name: operator
+          image: registry.fedoraproject.org/fedora:latest
+          command: ["/bin/bash", "/opt/run.sh"]
+          volumeMounts:
+            - name: script
+              mountPath: /opt
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: ns-operator-script
+            defaultMode: 0755

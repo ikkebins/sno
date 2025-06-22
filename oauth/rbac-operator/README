@@ -1,0 +1,23 @@
+Überprüfung der RBAC-Zuweisungen
+
+👤 Welche Rechte hat user?
+oc auth can-i --as user --list
+
+📦 Was darf user im Namespace foo?
+oc auth can-i --as user --namespace=foo --list
+Oder:
+
+oc auth can-i create pods --as user --namespace=foo
+
+📚 Welche ClusterRoleBindings existieren?
+oc get clusterrolebinding | grep user
+
+🔐 Welche RoleBindings sind im Namespace foo?
+oc get rolebindings -n foo
+
+
+🚨 Sicherheitshinweis (wichtig)
+
+Dieser Operator ist nicht abgesichert für Multi-Tenant-Betrieb – er ist nur für Testsysteme!
+In einer Produktivumgebung würdest du z. B. mit einem Admission Webhook, Gatekeeper oder einem sicheren Operator (z. B. Kyverno, Kubewarden) arbeiten.
+Möchtest du diesen Operator in ein separates Git-Repo oder Helm-Chart gießen? Oder eine Möglichkeit, den Benutzer zu definieren (nicht nur user statisch)?

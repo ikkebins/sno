@@ -1,0 +1,93 @@
+# 1. user bekommt admin in neuen Namespaces (generate)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: bind-user-to-new-ns
+spec:
+  generateExistingOnPolicyApplication: true
+  rules:
+    - name: add-admin-binding-for-user
+      match:
+        resources:
+          kinds: ["Namespace"]
+      generate:
+        kind: RoleBinding
+        apiVersion: rbac.authorization.k8s.io/v1
+        name: user-admin
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              created-by: kyverno
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: admin
+          subjects:
+            - kind: User
+              name: user
+              apiGroup: rbac.authorization.k8s.io
+---
+# 2. user darf keine Secrets lesen – NICHT im background!
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-secret-access
+spec:
+  background: false
+  validationFailureAction: Enforce
+  rules:
+    - name: block-user-secret-read
+      match:
+        any:
+          - resources:
+              kinds: ["Secret"]
+      preconditions:
+        all:
+          - key: "{{request.userInfo.username}}"
+            operator: Equals
+            value: "user"
+      validate:
+        message: "User 'user' darf keine Secrets lesen"
+        deny: {}
+---
+# 3. Namespace braucht Label "owner"
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-namespace-owner
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-owner-label
+      match:
+        resources:
+          kinds: ["Namespace"]
+      validate:
+        message: "Namespace muss das Label 'owner' enthalten"
+        pattern:
+          metadata:
+            labels:
+              owner: "?*"
+---
+# 4. Kein Image mit ":latest"
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: no-latest-tag
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: block-latest-tag
+      match:
+        resources:
+          kinds: ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"]
+      validate:
+        message: "Verwende keine Images mit dem Tag ':latest'"
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
