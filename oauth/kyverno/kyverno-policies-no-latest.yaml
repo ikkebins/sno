@@ -1,0 +1,30 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: no-latest-tag
+spec:
+  validationFailureAction: Enforce  # oder "Audit" zum Testen
+  background: true
+  rules:
+    - name: block-latest-tag
+      match:
+        resources:
+          kinds:
+            - Pod
+            - Deployment
+            - StatefulSet
+            - DaemonSet
+            - Job
+            - CronJob
+          namespaces:
+            - "!kube-system"
+            - "!kube-public"
+            - "!default"
+            - "!openshift-*"
+            - "!kyverno"
+      validate:
+        message: "Verwende keine Images mit dem Tag 'latest'."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"
