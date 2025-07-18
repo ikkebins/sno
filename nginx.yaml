@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: auth
+              mountPath: /etc/nginx/auth
+        - name: app
+          image: <deine-app>
+          ports:
+            - containerPort: 3000
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-basic-auth
+        - name: auth
+          secret:
+            secretName: basic-auth-secret
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-basic-auth
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / {
+        auth_basic "Geschützt";
+        auth_basic_user_file /etc/nginx/auth/auth.htpasswd;
+
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      }
+    }
+
+# htpasswd -c -B -b auth.htpasswd meinuser meinpasswort
+# oc create secret generic basic-auth-secret \
+  --from-file=auth.htpasswd=auth.htpasswd
+# oc expose svc myapp
+# oc expose deployment myapp --port=8080
