@@ -1,0 +1,155 @@
+# Secret für Basic Auth (Beispiel: user:pass)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth
+type: Opaque
+stringData:
+  .htpasswd: |
+    user:$apr1$xyz$examplehash
+
+---
+# NGINX ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  default.conf: |
+    server {
+      listen 80;
+      auth_basic "Restricted";
+      auth_basic_user_file /etc/nginx/auth/.htpasswd;
+      location / {
+        proxy_pass http://localhost:7860;
+      }
+    }
+
+---
+# Shared RWX Volume 1
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-volume-1
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Shared RWX Volume 2
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-volume-2
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Headless Service für StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-headless
+spec:
+  clusterIP: None
+  selector:
+    app: app
+  ports:
+    - name: http
+      port: 80
+
+---
+# StatefulSet mit 7 Pods (app-0 bis app-6)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: app
+spec:
+  serviceName: app-headless
+  replicas: 7
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d
+        - name: htpasswd
+          mountPath: /etc/nginx/auth
+      - name: app
+        image: deine-app-mit-gpu:latest
+        ports:
+        - containerPort: 7860
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: shared1
+          mountPath: /mnt/vol1
+        - name: shared2
+          mountPath: /mnt/vol2
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: nginx-config
+      - name: htpasswd
+        secret:
+          secretName: basic-auth
+      - name: shared1
+        persistentVolumeClaim:
+          claimName: shared-volume-1
+      - name: shared2
+        persistentVolumeClaim:
+          claimName: shared-volume-2
+######
+#!/bin/bash
+
+COUNT=7
+DOMAIN="apps.domain.example.com" # Ändern auf deine Route-Domain
+
+for i in $(seq 0 $((COUNT - 1))); do
+cat <<EOF
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-$i
+spec:
+  selector:
+    statefulset.kubernetes.io/pod-name: app-$i
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: app-$i
+spec:
+  to:
+    kind: Service
+    name: app-$i
+  port:
+    targetPort: 80
+  host: app-$i.$DOMAIN
+
+EOF
+done
