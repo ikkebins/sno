@@ -1,0 +1,64 @@
+http:
+  routers:
+    ocp-apps-http:
+      rule: "Host(`apps.sno.example.com`) || HostRegexp(`{subdomain:[a-zA-Z0-9-]+}.apps.sno.example.com`)"
+      service: ocp-router-http
+      entryPoints:
+        - web
+  services:
+    ocp-router-http:
+      loadBalancer:
+        servers:
+          - url: "http://10.10.0.100:80"
+
+
+
+tcp:
+  routers:
+    test-apps:
+      rule: "HostSNI(`apache-test.test.example.com`) || HostSNIRegexp(`^.+\\.test\\.example\\.com$`)"
+      entryPoints:
+        - websecure
+      service: test-app
+      tls:
+        passthrough: true
+
+    opentest-apps:
+      rule: "HostSNI(`test.example.com`) || HostSNIRegexp(`^.+\\.test\\.example\\.com$`)"
+      entryPoints:
+        - websecure
+      service: test-app
+      tls:
+        passthrough: true
+
+    ocp-apps:
+      rule: "HostSNI(`apps.sno.example.com`) || HostSNIRegexp(`^.+\\.apps\\.sno\\.example\\.com$`)"
+      entryPoints:
+        - websecure
+      service: ocp-ingress
+      tls:
+        passthrough: true
+
+    ocp-api:
+      rule: "HostSNI(`api.sno.example.com`)"
+      entryPoints:
+        - k8sapi
+      service: ocp-api
+      tls:
+        passthrough: true
+
+  services:
+    ocp-ingress:
+      loadBalancer:
+        servers:
+          - address: "10.10.0.100:443"
+
+    ocp-api:
+      loadBalancer:
+        servers:
+          - address: "10.10.0.100:6443"
+
+    test-app:
+      loadBalancer:
+        servers:
+          - address: "10.10.0.100:30987"
